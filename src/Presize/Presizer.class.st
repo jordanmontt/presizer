@@ -1,9 +1,7 @@
 Class {
 	#name : 'Presizer',
-	#superclass : 'Object',
+	#superclass : 'IllAbstractProfiler',
 	#instVars : [
-		'instrumenter',
-		'handler',
 		'spiedCollections'
 	],
 	#category : 'Presize-Objects',
@@ -11,43 +9,56 @@ Class {
 	#tag : 'Objects'
 }
 
-{ #category : 'as yet unclassified' }
-Presizer >> analize: aBlock [
-
-	self instrument.
-	[ aBlock value ] ensure: [ self deinstrument ]
-]
-
-{ #category : 'as yet unclassified' }
-Presizer >> deinstrument [ 
-
-	instrumenter deinstrument
-]
-
 { #category : 'initialization' }
 Presizer >> initialize [
 
     super initialize.
-    spiedCollections := OrderedCollection new: 10000.
-
-    handler := PresizerHandler new profiler: self; yourself.
-    instrumenter := IllInstrumenter onProfiler: self instrumentationHandler: handler
+    spiedCollections := OrderedCollection new: 10000
 ]
 
-{ #category : 'as yet unclassified' }
-Presizer >> instrument [ 
+{ #category : 'profiling' }
+Presizer >> internalRegisterAllocation: newlyAllocatedObject [
 
-	instrumenter instrument
-]
+    | metaClass filteredContext callsite allocationPath i n sample |
 
-{ #category : 'as yet unclassified' }
-Presizer >> registerAllocation: newlyAllocatedObject withCallSite: callsite [
+    (newlyAllocatedObject isKindOf: Collection) ifFalse: [ ^ newlyAllocatedObject ].
 
-    spiedCollections add: newlyAllocatedObject
-]
+    metaClass := newlyAllocatedObject class class.
+    i := 1.
+    n := 120.
+    allocationPath := Array new: n.
+    callsite := PresizerCallSite new.
 
-{ #category : 'as yet unclassified' }
-Presizer >> registerSample: sample [
+    filteredContext := thisContext "this method"
+            sender "IllHandler >> #afterExecutionWithReceiver:returnValue:"
+            sender "proxy method".
+    "Get the textual allocation site."
+    [ filteredContext receiver class = metaClass ] whileTrue: [
+            allocationPath
+                at: i put: filteredContext compiledCode;
+                at: i + 1 put: filteredContext pc - 1.
+            i := i + 2.
+            filteredContext := filteredContext sender ].
 
-    spiedCollections add: sample
+    "Now the filtered context is at the call site of basicNew (or equivalent, basicNew: Array>>new:)"
+    callsite
+        method: filteredContext compiledCode;
+        offset: filteredContext pc - 1.
+    "Get the rest of the path until a limit n"
+    [ filteredContext isNil or: [ i > n ] ] whileFalse: [
+            allocationPath
+                at: i put: filteredContext compiledCode;
+                at: i + 1 put: filteredContext pc - 1.
+            i := i + 2.
+            filteredContext := filteredContext sender ].
+
+    callsite path: allocationPath.
+    sample := PresizerSample new
+                  collectionInstance: newlyAllocatedObject;
+                  callsite: callsite;
+                  yourself.
+
+    spiedCollections add: sample.
+
+    ^ newlyAllocatedObject
 ]
