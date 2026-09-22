@@ -17,7 +17,7 @@ Presizer >> initialize [
 ]
 
 { #category : 'profiling' }
-Presizer >> internalRegisterAllocation: newlyAllocatedObject [
+Presizer >> registerAllocation: newlyAllocatedObject [
 
     | metaClass filteredContext callsite allocationPath i n sample |
 
