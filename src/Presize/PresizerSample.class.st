@@ -2,8 +2,8 @@ Class {
 	#name : 'PresizerSample',
 	#superclass : 'Object',
 	#instVars : [
-		'callsite',
-		'collectionInstance'
+		'spiedCollectionInstance',
+		'allocationPath'
 	],
 	#category : 'Presize-Objects',
 	#package : 'Presize',
@@ -11,25 +11,38 @@ Class {
 }
 
 { #category : 'accessing' }
-PresizerSample >> callsite [
+PresizerSample >> allocationPath [
 
-	^ callsite
+	^ allocationPath
 ]
 
 { #category : 'accessing' }
-PresizerSample >> callsite: anObject [
+PresizerSample >> allocationPath: anObject [
 
-	callsite := anObject
+	allocationPath := anObject
 ]
 
 { #category : 'accessing' }
-PresizerSample >> collectionInstance [
+PresizerSample >> inspectorPath: aBuilder [
 
-	^ collectionInstance
+	<inspectorPresentationOrder: 1 title: 'Allocation Path'>
+	^ self sendersCallStack buildInspectorPresenter: aBuilder
 ]
 
 { #category : 'accessing' }
-PresizerSample >> collectionInstance: anObject [
+PresizerSample >> sendersCallStack [
 
-	collectionInstance := anObject
+	^ IllSendersCallStack senders: allocationPath
+]
+
+{ #category : 'accessing' }
+PresizerSample >> spiedCollectionInstance [
+
+	^ spiedCollectionInstance
+]
+
+{ #category : 'accessing' }
+PresizerSample >> spiedCollectionInstance: anObject [
+
+	spiedCollectionInstance := anObject
 ]

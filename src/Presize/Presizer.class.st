@@ -2,60 +2,76 @@ Class {
 	#name : 'Presizer',
 	#superclass : 'IllAbstractProfiler',
 	#instVars : [
-		'spiedCollections'
+		'spiedCollections',
+		'traversalDepth'
+	],
+	#classVars : [
+		'CollectionClassestoSpy'
 	],
 	#category : 'Presize-Objects',
 	#package : 'Presize',
 	#tag : 'Objects'
 }
 
+{ #category : 'accessing' }
+Presizer class >> collectionClassesToSpy [
+
+    ^ {
+        "Character collections"
+        CharacterSet. WideCharacterSet.
+        "Ordered collections"
+        OrderedCollection. SortedCollection. Stack. Heap. KeyedTree.
+        "Regular set collections"
+        Set. PluggableSet.
+        "Regular dictionary collections"
+        Dictionary. SmallDictionary. OrderedDictionary. PluggableDictionary.
+        "Identity collections"
+        IdentitySet. IdentityDictionary. SmallIdentityDictionary. OrderedIdentityDictionary.
+        "Weak collections"
+        WeakSet. WeakOrderedCollection. WeakKeyDictionary. WeakValueDictionary.
+        "Weak identity collections"
+        WeakIdentitySet. WeakIdentityKeyDictionary. WeakIdentityValueDictionary }
+]
+
+{ #category : 'class initialization' }
+Presizer class >> initialize [
+
+    CollectionClassestoSpy := self collectionClassesToSpy
+]
+
 { #category : 'initialization' }
 Presizer >> initialize [
 
     super initialize.
-    spiedCollections := OrderedCollection new: 10000
+    spiedCollections := OrderedCollection new: 10000.
+    traversalDepth := 80 "depth is half of the size, so 40 in this case. This is because the compiled method and the offset use two array positions. See registerAllocation: method"
 ]
 
 { #category : 'profiling' }
 Presizer >> registerAllocation: newlyAllocatedObject [
 
-    | metaClass filteredContext callsite allocationPath i n sample |
+    | filteredContext allocationPath i sample |
 
-    (newlyAllocatedObject isKindOf: Collection) ifFalse: [ ^ newlyAllocatedObject ].
+    (CollectionClassestoSpy includes: newlyAllocatedObject class) ifFalse: [ ^ newlyAllocatedObject ].
 
-    metaClass := newlyAllocatedObject class class.
     i := 1.
-    n := 120.
-    allocationPath := Array new: n.
-    callsite := PresizerCallSite new.
+    allocationPath := Array new: traversalDepth.
 
     filteredContext := thisContext "this method"
             sender "IllHandler >> #afterExecutionWithReceiver:returnValue:"
             sender "proxy method".
-    "Get the textual allocation site."
-    [ filteredContext receiver class = metaClass ] whileTrue: [
+
+    "Get the allocation path until a limit n"
+    [ filteredContext isNil or: [ i > traversalDepth ] ] whileFalse: [
             allocationPath
                 at: i put: filteredContext compiledCode;
                 at: i + 1 put: filteredContext pc - 1.
             i := i + 2.
             filteredContext := filteredContext sender ].
 
-    "Now the filtered context is at the call site of basicNew (or equivalent, basicNew: Array>>new:)"
-    callsite
-        method: filteredContext compiledCode;
-        offset: filteredContext pc - 1.
-    "Get the rest of the path until a limit n"
-    [ filteredContext isNil or: [ i > n ] ] whileFalse: [
-            allocationPath
-                at: i put: filteredContext compiledCode;
-                at: i + 1 put: filteredContext pc - 1.
-            i := i + 2.
-            filteredContext := filteredContext sender ].
-
-    callsite path: allocationPath.
     sample := PresizerSample new
-                  collectionInstance: newlyAllocatedObject;
-                  callsite: callsite;
+                  spiedCollectionInstance: newlyAllocatedObject;
+                  allocationPath: allocationPath;
                   yourself.
 
     spiedCollections add: sample.
