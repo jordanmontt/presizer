@@ -2,8 +2,9 @@ Class {
 	#name : 'Presizer',
 	#superclass : 'IllAbstractProfiler',
 	#instVars : [
-		'spiedCollections',
-		'traversalDepth'
+		'traversalDepth',
+		'samples',
+		'instancesThatAreNotCollections'
 	],
 	#classVars : [
 		'CollectionClassestoSpy'
@@ -14,7 +15,7 @@ Class {
 }
 
 { #category : 'accessing' }
-Presizer class >> collectionClassesToSpy [
+Presizer class >> growableCollectionClasses [
 
     ^ {
         "Character collections"
@@ -36,14 +37,15 @@ Presizer class >> collectionClassesToSpy [
 { #category : 'class initialization' }
 Presizer class >> initialize [
 
-    CollectionClassestoSpy := self collectionClassesToSpy
+    CollectionClassestoSpy := self growableCollectionClasses
 ]
 
 { #category : 'initialization' }
 Presizer >> initialize [
 
     super initialize.
-    spiedCollections := OrderedCollection new: 10000.
+    instancesThatAreNotCollections := 0.
+    samples := OrderedCollection new: 10000.
     traversalDepth := 80 "depth is half of the size, so 40 in this case. This is because the compiled method and the offset use two array positions. See registerAllocation: method"
 ]
 
@@ -52,7 +54,9 @@ Presizer >> registerAllocation: newlyAllocatedObject [
 
     | filteredContext allocationPath i sample |
 
-    (CollectionClassestoSpy includes: newlyAllocatedObject class) ifFalse: [ ^ newlyAllocatedObject ].
+    (CollectionClassestoSpy includes: newlyAllocatedObject class) ifFalse: [
+            instancesThatAreNotCollections := instancesThatAreNotCollections + 1.
+            ^ newlyAllocatedObject ].
 
     i := 1.
     allocationPath := Array new: traversalDepth.
@@ -74,7 +78,34 @@ Presizer >> registerAllocation: newlyAllocatedObject [
                   allocationPath: allocationPath;
                   yourself.
 
-    spiedCollections add: sample.
+    samples add: sample.
 
     ^ newlyAllocatedObject
+]
+
+{ #category : 'statistics' }
+Presizer >> sizesDistributionGroupingBy: n [
+
+    | groupingBlock |
+    self assert: n > 0.
+
+    groupingBlock := n = 1
+            ifTrue: [ [ :e | e ] ]
+            ifFalse: [ [ :e | e howManyOf: n ] ].
+    ^ samples collect: [ :sample | groupingBlock value: sample spiedCollectionInstance size ] as: Bag
+]
+
+{ #category : 'statistics' }
+Presizer >> typesDistributionGroupingBy: n [
+
+    | groupingBlock typesPerCollection |
+    self assert: n > 0.
+    groupingBlock := (n = 1)
+            ifTrue: [ [ :e | e ] ]
+            ifFalse: [ [ :e | e howManyOf: n ] ].
+
+    typesPerCollection := samples collect: [ :sample |
+            (sample spiedCollectionInstance collect: #class as: Set) size ].
+
+    ^ typesPerCollection collect: [ :e | groupingBlock value: e ] as: Bag
 ]
